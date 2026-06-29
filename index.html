@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Indoor Environmental Quality Monitoring Dashboard</title>
+  <!-- CDN scripts: NO defer — must load in order before app.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-row">
+        <img src="assets/chula-logo.png" onerror="this.src='chula-logo.png'" class="uni-logo chula-logo" alt="Chulalongkorn University">
+        <div class="logo-divider"></div>
+        <img src="assets/ntust-logo.png" onerror="this.src='ntust-logo.png'" class="uni-logo ntust-logo" alt="NTUST">
+      </div>
+      <div class="project-name">
+        <h2>MOULD</h2>
+        <p>Monitoring Platform</p>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="active" data-target="overview-section">▦ Overview</button>
+      <button data-target="trend-section">↗ Trend Analysis</button>
+      <button data-target="floor-section">▧ Floor Plan</button>
+      <button data-target="images-section">▥ Inspection Images</button>
+      <button data-target="reports-section">⇩ Reports</button>
+    </nav>
+
+    <div class="selectors">
+      <label>Structural Room</label>
+      <select id="roomSelect">
+        <option value="COR">Corridor (COR_01)</option>
+        <option value="MCH">Mechanical Control Room (MCH_P1)</option>
+        <option value="MTG">Meeting Room (MTG_P1)</option>
+      </select>
+      <label>Environmental Zone</label>
+      <div class="zone-buttons">
+        <button class="zone-btn baseline" data-zone="B">Baseline<br><small>Zone B</small></button>
+        <button class="zone-btn clean active" data-zone="C">Clean Area<br><small>Zone C</small></button>
+        <button class="zone-btn risk" data-zone="R">Risk Area<br><small>Zone R</small></button>
+      </div>
+      <div class="active-target">
+        <div class="status-dot"></div>
+        <div>
+          <b id="activeSensor">COR_C_A_IAQ</b>
+          <span id="activeDesc">Corridor · Clean Area</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1>Indoor Environmental Quality Monitoring Dashboard</h1>
+        <p>Field Validation and Tropical Calibration of WUFI FinMould for Concealed Ceiling Mould Risk Assessment</p>
+      </div>
+      <div class="top-status"><span class="live-dot"></span> LIVE <small id="lastUpdate">--</small></div>
+    </header>
+
+    <!-- Missing Data Alert Banner -->
+    <div id="dataAlertBanner" style="display:none;align-items:center;gap:12px;
+      background:#401617;border:1px solid #ff5353;border-radius:10px;
+      padding:12px 16px;margin:14px 0;color:#ffd0d0;font-size:14px">
+    </div>
+
+    <section id="overview-section" class="kpi-row">
+      <article class="kpi"><span>Temperature</span><b id="kpiTemp">-- °C</b><small id="kpiTempRange">Min -- | Max --</small></article>
+      <article class="kpi"><span>Relative Humidity</span><b id="kpiRh">-- %</b><small id="kpiRhRange">Min -- | Max --</small></article>
+      <article class="kpi"><span>CO₂ Concentration</span><b id="kpiCo2">-- ppm</b><small id="kpiCo2Range">Min -- | Max --</small></article>
+      <article class="kpi"><span>Mould Risk Index</span><b id="kpiRisk">--</b><small id="kpiRiskScore">Score -- / 100</small></article>
+      <article class="kpi"><span>Data Quality (24h)</span><b id="kpiQuality">-- %</b><small id="kpiQualityDetail">NDJSON API + Manual MasterLog</small></article>
+    </section>
+
+    <section id="trend-section" class="content-grid">
+      <section class="trend-column">
+        <div class="chart-card" id="tempCard">
+          <div class="card-head"><h3>Temperature Trend (°C)</h3><div class="chart-tools" data-chart="tempChart"></div></div>
+          <canvas id="tempChart"></canvas>
+          <div class="stats"><span>Current <b id="tempCurrent">--</b></span><span>Average <b id="tempAvg">--</b></span><span>Min <b id="tempMin">--</b></span><span>Max <b id="tempMax">--</b></span></div>
+        </div>
+        <div class="chart-card" id="rhCard">
+          <div class="card-head"><h3>Relative Humidity Trend (%)</h3><div class="chart-tools" data-chart="rhChart"></div></div>
+          <canvas id="rhChart"></canvas>
+          <div class="stats"><span>Current <b id="rhCurrent">--</b></span><span>Average <b id="rhAvg">--</b></span><span>Min <b id="rhMin">--</b></span><span>Max <b id="rhMax">--</b></span></div>
+        </div>
+        <div class="chart-card" id="co2Card">
+          <div class="card-head"><h3>CO₂ Concentration Trend (ppm)</h3><div class="chart-tools" data-chart="co2Chart"></div></div>
+          <canvas id="co2Chart"></canvas>
+          <div class="stats"><span>Current <b id="co2Current">--</b></span><span>Average <b id="co2Avg">--</b></span><span>Min <b id="co2Min">--</b></span><span>Max <b id="co2Max">--</b></span></div>
+        </div>
+
+        <!-- Multi-sensor Overlay -->
+        <div class="chart-card" id="overlayCard">
+          <div class="card-head">
+            <div>
+              <h3>RH Comparison: Clean vs Risk Zone</h3>
+              <div style="display:flex;gap:16px;margin-top:6px;align-items:center">
+                <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;white-space:nowrap">
+                  <span style="display:inline-block;width:18px;height:2px;background:#7cc8ff;border-radius:2px"></span><span id="legendClean">Clean — Above Ceiling</span>
+                </span>
+                <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;white-space:nowrap">
+                  <span style="display:inline-block;width:18px;height:2px;background:#ff5353;border-radius:2px"></span><span id="legendRisk">Risk — Above Ceiling</span>
+                </span>
+                <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;white-space:nowrap">
+                  <span style="display:inline-block;width:18px;border-top:2px dashed #ffb84d"></span>70% line
+                </span>
+              </div>
+            </div>
+            <div class="chart-tools" data-chart="overlayChart"></div>
+          </div>
+          <canvas id="overlayChart"></canvas>
+          <div class="stats">
+            <span>Clean RH <b id="overlayCleanRh">--</b></span>
+            <span>Risk RH <b id="overlayRiskRh">--</b></span>
+            <span>Δ Gap <b id="overlayGap">--</b></span>
+            <span>Risk >70% <b id="overlayExceed" style="color:#ff5353">-- hrs</b></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="evidence-column">
+        <div id="floor-section" class="panel floor-panel">
+          <div class="card-head">
+            <h3>Floor Plan / Sensor Layout</h3>
+            <div style="display:flex;align-items:center;gap:6px">
+              <small style="color:var(--muted)">หมุน:</small>
+              <button onclick="rotateFloor(-90)" style="background:#122137;color:#d7e8ff;border:1px solid var(--line);border-radius:6px;width:30px;height:28px;cursor:pointer;font-size:14px">↺</button>
+              <button onclick="rotateFloor(90)"  style="background:#122137;color:#d7e8ff;border:1px solid var(--line);border-radius:6px;width:30px;height:28px;cursor:pointer;font-size:14px">↻</button>
+              <button onclick="resetFloor()"     style="background:#122137;color:#d7e8ff;border:1px solid var(--line);border-radius:6px;width:30px;height:28px;cursor:pointer;font-size:14px">⌂</button>
+              <small id="floor-deg" style="color:var(--muted);min-width:36px">0°</small>
+            </div>
+          </div>
+          <div class="floor-wrap">
+            <img id="floorplan-img" src="assets/floorplan.png" onerror="this.style.display='none'" alt="Floor plan"
+              style="transition:transform .3s ease;transform-origin:center center">
+            <div class="floor-placeholder">Revit Floor Plan Export<br><small>Put file at assets/floorplan.png</small></div>
+            <button class="pin pin-cor" data-room="COR">COR</button>
+            <button class="pin pin-mch" data-room="MCH">MCH</button>
+            <button class="pin pin-mtg" data-room="MTG">MTG</button>
+          </div>
+          <div class="legend"><span><i class="b"></i>Baseline</span><span><i class="c"></i>Clean Area</span><span><i class="r"></i>Risk Area</span></div>
+        </div>
+        <div id="images-section" class="panel inspection-panel">
+          <div class="card-head" style="flex-wrap:nowrap;align-items:flex-start">
+            <h3 style="white-space:nowrap">Inspection Images</h3>
+            <small style="text-align:right;line-height:1.4">White light and UV<br>fluorescence camera evidence</small>
+          </div>
+          <div class="image-grid two-images" id="inspectionImages"></div>
+        </div>
+
+        <!-- AAALAC Threshold Panel -->
+        <div class="panel" id="aaalac-panel">
+          <div class="card-head">
+            <h3>AAALAC / NRC 2011 Compliance</h3>
+            <small>Standard: T 18–26°C · RH 30–70%</small>
+          </div>
+          <div style="display:grid;gap:10px;margin-top:8px">
+
+            <!-- Temperature -->
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:var(--muted);font-size:12px">Temperature</span>
+                <span style="font-size:12px">
+                  <span style="color:var(--muted)">Standard: 18–26°C</span>
+                  &nbsp;·&nbsp;
+                  <b id="aaalac-temp-val">-- °C</b>
+                  <span id="aaalac-temp-badge" style="margin-left:6px;padding:2px 8px;border-radius:20px;font-size:11px"></span>
+                </span>
+              </div>
+              <div style="background:#0b1522;border-radius:6px;height:8px;overflow:hidden">
+                <div id="aaalac-temp-bar" style="height:100%;border-radius:6px;transition:width .4s,background .4s;width:0%"></div>
+              </div>
+            </div>
+
+            <!-- Humidity -->
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:var(--muted);font-size:12px">Relative Humidity</span>
+                <span style="font-size:12px">
+                  <span style="color:var(--muted)">Standard: 30–70%</span>
+                  &nbsp;·&nbsp;
+                  <b id="aaalac-rh-val">-- %</b>
+                  <span id="aaalac-rh-badge" style="margin-left:6px;padding:2px 8px;border-radius:20px;font-size:11px"></span>
+                </span>
+              </div>
+              <div style="background:#0b1522;border-radius:6px;height:8px;overflow:hidden">
+                <div id="aaalac-rh-bar" style="height:100%;border-radius:6px;transition:width .4s,background .4s;width:0%"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="reports-section" class="panel" style="margin-top:14px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+        <span style="font-size:32px;flex-shrink:0">💾</span>
+        <div>
+          <h3 style="margin:0;font-size:22px">Raw Data Extraction Console</h3>
+          <p style="margin:4px 0 0;color:var(--muted);font-size:13px">Automated pipeline downloader tool &mdash; export sensor data from active API endpoints</p>
+        </div>
+      </div>
+
+      <div style="display:grid;gap:18px;margin-top:20px">
+
+        <!-- Endpoint -->
+        <div>
+          <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Target Service Endpoint System Route</label>
+          <select id="rpt-endpoint" style="width:100%;background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:15px">
+            <option value="iaq/raw">/iaq/raw</option>
+            <option value="iaq/range">/iaq/range</option>
+            <option value="images/raw">/images/raw</option>
+          </select>
+        </div>
+
+        <!-- Size -->
+        <div id="rpt-size-wrap">
+          <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Maximum Payload Record Depth (size)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="rpt-size" type="number" value="500" min="1" max="9999"
+              style="flex:1;background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:15px">
+            <button onclick="document.getElementById('rpt-size').value=Math.max(1,+document.getElementById('rpt-size').value-100)"
+              style="background:#1a2d45;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:18px;cursor:pointer">−</button>
+            <button onclick="document.getElementById('rpt-size').value=Math.min(9999,+document.getElementById('rpt-size').value+100)"
+              style="background:#c0392b;color:white;border:none;border-radius:8px;padding:10px 16px;font-size:18px;cursor:pointer">+</button>
+          </div>
+        </div>
+
+        <!-- Sensors -->
+        <div id="rpt-sensors-wrap">
+          <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Filter Device Sensor Targets to Extract</label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px" id="rpt-sensor-list">
+            <!-- populated by JS -->
+          </div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:4px 0">
+
+        <!-- Format -->
+        <div>
+          <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Choose Output Export Target File Layout</label>
+          <div style="display:flex;gap:24px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="radio" name="rpt-fmt" value="csv" checked style="accent-color:#c0392b;width:16px;height:16px"> Flattened CSV Structure (.csv)
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="radio" name="rpt-fmt" value="ndjson" style="accent-color:#c0392b;width:16px;height:16px"> Raw Stream Frame Structure (.ndjson)
+            </label>
+          </div>
+        </div>
+
+        <!-- Button -->
+        <div>
+          <button id="rpt-btn" onclick="runExtraction()"
+            style="display:flex;align-items:center;gap:10px;background:#1a2d45;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:13px 22px;font-size:15px;cursor:pointer">
+            <span>⚡</span> Initialize Extraction Execution Route
+          </button>
+        </div>
+
+        <!-- Status -->
+        <div id="rpt-status" style="display:none;padding:12px 16px;border-radius:8px;font-size:14px"></div>
+
+      </div>
+    </section>
+
+
+  </main>
+
+  <div id="chartModal" class="chart-modal">
+    <div class="chart-modal-content">
+      <button id="closeChartModal" class="chart-modal-close">×</button>
+      <h2 id="modalChartTitle">Chart</h2>
+      <canvas id="modalChart"></canvas>
+    </div>
+  </div>
+
+  <!-- app.js at end of body — Chart.js already loaded above -->
+  <script src="app.js"></script>
+</body>
+</html>
