@@ -96,7 +96,7 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
 .chart-card{
   display:flex;
   flex-direction:column;
-  height:220px;
+  height:340px;
   overflow:hidden;
 }
 .card-head{
