@@ -89,6 +89,7 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
   background:linear-gradient(180deg,rgba(18,32,50,.96),rgba(9,18,30,.96));
   border:1px solid var(--line);border-radius:12px;padding:16px;
   box-shadow:0 12px 32px rgba(0,0,0,.22);
+  overflow:hidden;
 }
 
 /* ===== Chart Card: flex column so canvas fills remaining space ===== */
@@ -96,6 +97,7 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
   display:flex;
   flex-direction:column;
   height:220px;
+  overflow:hidden;
 }
 .card-head{
   display:flex;justify-content:space-between;align-items:flex-start;
@@ -114,11 +116,12 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
 }
 
 .stats{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;
   margin-top:8px;flex-shrink:0;
+  min-width:0;
 }
-.stats span{color:var(--muted);font-size:12px}
-.stats b{display:block;color:var(--text);font-size:16px;margin-top:3px}
+.stats span{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stats b{display:block;color:var(--text);font-size:16px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ===== Chart Tools ===== */
 .chart-tools{display:flex;gap:6px}
