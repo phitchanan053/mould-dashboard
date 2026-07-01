@@ -85,7 +85,7 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
 .chart-card{
   display:flex;
   flex-direction:column;
-  height:260px;
+  height:220px;
 }
 .card-head{
   display:flex;justify-content:space-between;align-items:flex-start;
@@ -119,9 +119,9 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
 
 /* ===== Evidence / Floor / Inspection ===== */
 .evidence-column{display:grid;grid-template-columns:1fr;gap:14px}
-.floor-panel{min-height:390px}
+.floor-panel{min-height:300px}
 .floor-wrap{
-  position:relative;height:320px;background:#08111c;
+  position:relative;height:230px;background:#08111c;
   border:1px solid var(--line);border-radius:10px;overflow:hidden;
   display:grid;place-items:center;
 }
