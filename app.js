@@ -296,21 +296,12 @@ function updateInsight(rh, temp, co2) {
 // ===== Evaluation Window =====
 const EVAL = { start: null, end: null };
 
-function parseEvalDate(str) {
-  if (!str) return null;
-  // Accept DD/MM/YYYY HH:MM or DD/MM/YYYY
-  const m = str.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
-  if (!m) return null;
-  const [, dd, mm, yyyy, hh = "00", min = "00"] = m;
-  return new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:00`);
-}
-
 function applyEvalWindow() {
-  const s = parseEvalDate(document.getElementById("evalStart").value);
-  const e = parseEvalDate(document.getElementById("evalEnd").value);
-  if (!s) { alert("Please enter Start date as DD/MM/YYYY HH:MM"); return; }
-  EVAL.start = s;
-  EVAL.end   = e || new Date();
+  const s = document.getElementById("evalStart").value;
+  const e = document.getElementById("evalEnd").value;
+  if (!s) { alert("Please set a Start date"); return; }
+  EVAL.start = new Date(s);
+  EVAL.end   = e ? new Date(e) : new Date();
 
   const info = document.getElementById("evalWindowInfo");
   if (info) {
