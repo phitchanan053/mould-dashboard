@@ -448,6 +448,17 @@ async function refresh() {
   makeChart("rhChart", "Relative Humidity %", rows, "humidity", "#7cc8ff");
   makeChart("co2Chart", "CO₂ ppm", rows, "co2", "#35d071");
 
+  // Chart.js sometimes measures its container before the CSS grid/flex layout
+  // has fully settled (esp. on first load), producing a canvas that renders
+  // too wide/misplaced until something (like a scroll) forces a re-measure.
+  // Force an explicit resize on the next two frames so this never lingers
+  // on screen and the user never has to scroll to "fix" it.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      Object.values(STATE.charts).forEach(c => c.resize());
+    });
+  });
+
   updateInspection(images);
   updateInsight(rh, temp, co2);
   updateAAALAC(temp, rh);
@@ -910,6 +921,19 @@ installToolbars();
 bindEvents();
 initReports();
 loadMasterLog().then(refresh);
+
+// Extra safety net: once EVERYTHING (images, fonts, CDN scripts) has finished
+// loading, force every chart to re-measure its container. This clears the
+// same "chart rendered before layout settled" glitch that can otherwise only
+// be fixed by the user manually scrolling the page.
+window.addEventListener("load", () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      Object.values(STATE.charts).forEach(c => c.resize());
+    });
+  });
+});
+
 setTimeout(() => {
   updateOverlay();
   setTimeout(updateOverlay, 5000);
