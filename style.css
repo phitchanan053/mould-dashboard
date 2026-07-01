@@ -131,7 +131,13 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
 }
 
 /* ===== Evidence / Floor / Inspection ===== */
-.evidence-column{display:grid;grid-template-columns:1fr;gap:14px}
+.evidence-column{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+  align-content:start;
+  align-self:start;
+}
 .floor-panel{min-height:300px}
 .floor-wrap{
   position:relative;height:230px;background:#08111c;
