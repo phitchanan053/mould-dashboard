@@ -64,10 +64,8 @@ function setText(id, value) {
 async function fetchIAQ() {
   const sensor = activeSensor();
   try {
-    // Use raw endpoint directly — returns newest-first, size 2000 covers ~14 days
     const res = await fetch(`${API}/iaq/raw?iaq=${sensor}&size=2000`);
     const rows = parseNDJSON(await res.text());
-    // Sort ascending by time for charting
     return rows.sort((a, b) => {
       const da = toDate(a), db = toDate(b);
       return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
@@ -83,7 +81,6 @@ async function fetchImages() {
   try {
     const res = await fetch(`${API}/images/raw?camera=${cam}&size=4`);
     const rows = parseNDJSON(await res.text());
-    // Only return images that belong to this camera — no cross-room fallback
     return rows.filter(r => r.camera_name && r.camera_name.toLowerCase().startsWith(cam));
   } catch (e) {
     console.warn("fetchImages error:", e);
@@ -138,7 +135,6 @@ function makeChart(id, label, rows, key, color) {
 
   const pts = chartPoints(rows, key);
 
-  // Set X-axis min/max from actual data so chart always shows the full range
   const times = pts.map(p => p.x.getTime()).filter(Boolean);
   const xMin = times.length ? new Date(Math.min(...times)) : undefined;
   const xMax = times.length ? new Date(Math.max(...times)) : undefined;
@@ -279,7 +275,6 @@ function updateInsight(rh, temp, co2) {
   setText("kpiRisk", risk);
   setText("kpiRiskScore", `Score ${score} / 100`);
 
-  // Color code MRI
   const riskEl = document.getElementById("kpiRisk");
   if (riskEl) {
     const colors = {
@@ -309,7 +304,6 @@ function applyEvalWindow() {
     info.textContent = `Window: ${fmt(EVAL.start)} → ${fmt(EVAL.end)}`;
   }
 
-  // Redraw all charts with window lines
   Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
   updateOverlay();
 }
@@ -326,12 +320,10 @@ function clearEvalWindow() {
 
 function drawEvalLines(chart) {
   if (!chart) return;
-  // Remove old eval plugins
   chart.options.plugins.evalWindow = { start: EVAL.start, end: EVAL.end };
   chart.update("none");
 }
 
-// Plugin to draw evaluation window lines on all charts
 const evalWindowPlugin = {
   id: "evalWindow",
   afterDraw(chart) {
@@ -367,10 +359,9 @@ const evalWindowPlugin = {
   }
 };
 
-// Register plugin globally
 Chart.register(evalWindowPlugin);
-const SENSOR_INTERVAL_MIN = 10;   // expected interval in minutes
-const ALERT_THRESHOLD_MIN = 30;   // alert if no data for this long
+const SENSOR_INTERVAL_MIN = 10;
+const ALERT_THRESHOLD_MIN = 30;
 
 function updateDataQuality(rows) {
   const el = document.getElementById("kpiQuality");
@@ -387,19 +378,16 @@ function updateDataQuality(rows) {
     return;
   }
 
-  // Last data timestamp
   const lastRow = rows[rows.length - 1];
   const lastTime = toDate(lastRow);
   const now = new Date();
   const minutesSinceLast = lastTime ? Math.floor((now - lastTime) / 60000) : 999;
 
-  // Completeness: count expected vs actual points in last 24h
   const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
   const recent = rows.filter(r => { const d = toDate(r); return d && d >= oneDayAgo; });
-  const expected = Math.floor(24 * 60 / SENSOR_INTERVAL_MIN); // 144 points/day
+  const expected = Math.floor(24 * 60 / SENSOR_INTERVAL_MIN);
   const completeness = Math.min(100, Math.round((recent.length / expected) * 100));
 
-  // Update KPI
   if (el) {
     el.textContent = `${completeness} %`;
     el.style.color = completeness >= 90 ? "#35d071" : completeness >= 70 ? "#ffb84d" : "#ff5353";
@@ -408,7 +396,6 @@ function updateDataQuality(rows) {
     elSmall.textContent = `${recent.length}/${expected} pts · Last: ${minutesSinceLast}m ago`;
   }
 
-  // Alert banner
   if (alertBanner) {
     if (minutesSinceLast >= ALERT_THRESHOLD_MIN) {
       alertBanner.style.display = "flex";
@@ -438,7 +425,6 @@ async function refresh() {
   setText("kpiTemp", `${fmt(temp.cur)} °C`);
   setText("kpiRh", `${fmt(rh.cur, 0)} %`);
 
-  // Color code RH
   const rhEl = document.getElementById("kpiRh");
   if (rhEl) {
     const rhVal = rh.cur || 0;
@@ -448,7 +434,7 @@ async function refresh() {
                      : "#35d071";
   }
   setText("kpiCo2", `${fmt(co2.cur, 0)} ppm`);
-  setText("kpiQuality", "");  // handled by updateDataQuality
+  setText("kpiQuality", "");
   updateDataQuality(rows);
   setText("kpiTempRange", `Min ${fmt(temp.min)} | Max ${fmt(temp.max)}`);
   setText("kpiRhRange", `Min ${fmt(rh.min)} | Max ${fmt(rh.max)}`);
@@ -461,6 +447,17 @@ async function refresh() {
   makeChart("tempChart", "Temperature °C", rows, "temperature", "#7cc8ff");
   makeChart("rhChart", "Relative Humidity %", rows, "humidity", "#7cc8ff");
   makeChart("co2Chart", "CO₂ ppm", rows, "co2", "#35d071");
+
+  // Chart.js sometimes measures its container before the CSS grid/flex layout
+  // has fully settled (esp. on first load), producing a canvas that renders
+  // too wide/misplaced until something (like a scroll) forces a re-measure.
+  // Force an explicit resize on the next two frames so this never lingers
+  // on screen and the user never has to scroll to "fix" it.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      Object.values(STATE.charts).forEach(c => c.resize());
+    });
+  });
 
   updateInspection(images);
   updateInsight(rh, temp, co2);
@@ -531,10 +528,27 @@ function bindEvents() {
     if (imageCard) imageCard.requestFullscreen();
   });
 
+  // ===== Fullscreen exit fix =====
+  // Some browsers (esp. Chrome) leave a stale compositing layer painted in the
+  // old fullscreen position after exiting fullscreen, making the element look
+  // like it is "floating"/overlapping other cards until the page is manually
+  // repainted (scroll/resize). We force a full-page reflow + repaint right
+  // after fullscreen state changes so this never lingers on screen.
   document.addEventListener("fullscreenchange", () => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         Object.values(STATE.charts).forEach(c => { c.resize(); c.update("none"); });
+
+        // Force the browser to fully repaint the layout.
+        document.body.style.display = "none";
+        void document.body.offsetHeight; // force reflow
+        document.body.style.display = "";
+
+        // Belt-and-braces: nudge the scroll position by 1px and back,
+        // which reliably clears leftover fullscreen paint artifacts.
+        const y = window.scrollY;
+        window.scrollTo(0, y + 1);
+        window.scrollTo(0, y);
       });
     });
   });
@@ -559,7 +573,6 @@ function toggleOverlaySensor(key) {
     const [color, bg] = colors[key];
     btn.style.opacity = OVERLAY_STATE[key] ? "1" : "0.35";
   }
-  // Update chart visibility
   const chart = STATE.charts["overlayChart"];
   if (!chart) return;
   if (key === "clean") chart.data.datasets[0].hidden = !OVERLAY_STATE.clean;
@@ -569,17 +582,30 @@ function toggleOverlaySensor(key) {
   }
   chart.update();
 }
-async function fetchSensorRows(sensorName) {
+async function fetchSensorRows(sensorName, attempt = 1) {
   try {
     const res = await fetch(`${API}/iaq/raw?iaq=${sensorName}&size=2000`);
     const text = await res.text();
     const rows = parseNDJSON(text);
+
+    // If we got nothing back, it's more likely a transient network/API
+    // hiccup than a sensor that truly has zero data. Retry once before
+    // giving up, so a single slow response doesn't make the line vanish.
+    if (!rows.length && attempt < 3) {
+      await new Promise(r => setTimeout(r, 800 * attempt));
+      return fetchSensorRows(sensorName, attempt + 1);
+    }
+
     return rows.sort((a, b) => {
       const da = toDate(a), db = toDate(b);
       return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
     });
   } catch (e) {
-    console.warn("fetchSensorRows error:", sensorName, e);
+    console.warn("fetchSensorRows error:", sensorName, e, `(attempt ${attempt})`);
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, 800 * attempt));
+      return fetchSensorRows(sensorName, attempt + 1);
+    }
     return [];
   }
 }
@@ -587,7 +613,7 @@ async function fetchSensorRows(sensorName) {
 let overlayLoading = false;
 
 async function updateOverlay() {
-  if (overlayLoading) return; // prevent concurrent calls
+  if (overlayLoading) return;
   overlayLoading = true;
   try {
     await _updateOverlay();
@@ -601,7 +627,6 @@ async function _updateOverlay() {
   const cleanSensor = `${room}_C_A_IAQ`;
   const riskSensor  = `${room}_R_A_IAQ`;
 
-  // Update legend labels with actual sensor names
   const legendClean = document.getElementById("legendClean");
   const legendRisk  = document.getElementById("legendRisk");
   if (legendClean) legendClean.textContent = `${cleanSensor} — Clean Above Ceiling`;
@@ -611,6 +636,21 @@ async function _updateOverlay() {
     fetchSensorRows(cleanSensor),
     fetchSensorRows(riskSensor)
   ]);
+
+  // If a sensor still has no data after the built-in retries, say so
+  // visibly instead of silently drawing an empty line.
+  if (legendClean) {
+    legendClean.textContent = cleanRows.length
+      ? `${cleanSensor} — Clean Above Ceiling`
+      : `${cleanSensor} — ⚠️ no data received`;
+    legendClean.style.color = cleanRows.length ? "" : "#ffb84d";
+  }
+  if (legendRisk) {
+    legendRisk.textContent = riskRows.length
+      ? `${riskSensor} — Risk Above Ceiling`
+      : `${riskSensor} — ⚠️ no data received`;
+    legendRisk.style.color = riskRows.length ? "" : "#ffb84d";
+  }
 
   const canvas = document.getElementById("overlayChart");
   if (!canvas) return;
@@ -623,7 +663,6 @@ async function _updateOverlay() {
   const riskCur  = riskRows.length  ? num(riskRows.at(-1).humidity)  : null;
   const gap = (cleanCur !== null && riskCur !== null) ? (riskCur - cleanCur).toFixed(1) : "--";
 
-  // Cumulative exceedance hours (Risk > 70%)
   let exceedHours = 0;
   for (let i = 1; i < riskRows.length; i++) {
     const rh = num(riskRows[i].humidity);
@@ -722,6 +761,37 @@ async function _updateOverlay() {
   });
 }
 
+// ===== AAALAC Threshold =====
+function updateAAALAC(temp, rh) {
+  const tVal = typeof temp.cur === "number" ? temp.cur : null;
+  const tPct = tVal !== null ? Math.min(100, Math.max(0, ((tVal - 18) / (26 - 18)) * 100)) : 0;
+  const tOk  = tVal !== null && tVal >= 18 && tVal <= 26;
+  const tEl  = document.getElementById("aaalac-temp-val");
+  const tBar = document.getElementById("aaalac-temp-bar");
+  const tBadge = document.getElementById("aaalac-temp-badge");
+  if (tEl) tEl.textContent = tVal !== null ? `${tVal.toFixed(1)} °C` : "--";
+  if (tBar) { tBar.style.width = `${tPct}%`; tBar.style.background = tOk ? "#35d071" : "#ff5353"; }
+  if (tBadge) {
+    tBadge.textContent = tOk ? "✓ IN RANGE" : "✗ OUT";
+    tBadge.style.background = tOk ? "#0c3524" : "#401617";
+    tBadge.style.color = tOk ? "#35d071" : "#ff5353";
+  }
+
+  const rhVal = typeof rh.cur === "number" ? rh.cur : null;
+  const rhPct = rhVal !== null ? Math.min(100, Math.max(0, ((rhVal - 30) / (70 - 30)) * 100)) : 0;
+  const rhOk  = rhVal !== null && rhVal >= 30 && rhVal <= 70;
+  const rhEl  = document.getElementById("aaalac-rh-val");
+  const rhBar = document.getElementById("aaalac-rh-bar");
+  const rhBadge = document.getElementById("aaalac-rh-badge");
+  if (rhEl) rhEl.textContent = rhVal !== null ? `${rhVal.toFixed(0)} %` : "--";
+  if (rhBar) { rhBar.style.width = `${rhPct}%`; rhBar.style.background = rhOk ? "#35d071" : "#ff5353"; }
+  if (rhBadge) {
+    rhBadge.textContent = rhOk ? "✓ IN RANGE" : "✗ OUT";
+    rhBadge.style.background = rhOk ? "#0c3524" : "#401617";
+    rhBadge.style.color = rhOk ? "#35d071" : "#ff5353";
+  }
+}
+
 async function loadLatestImages() {
   const images = await fetchImages();
   updateInspection(images);
@@ -732,10 +802,9 @@ async function searchHistoricalImages() {
   if (!input) { alert("Please select a date and time"); return; }
 
   const searchTime = new Date(input);
-  const from = new Date(searchTime.getTime() - 30 * 60000); // -30 min
-  const to   = new Date(searchTime.getTime() + 30 * 60000); // +30 min
-
-  const cam = activeCamera();
+  const from = new Date(searchTime.getTime() - 30 * 60000);
+  const to   = new Date(searchTime.getTime() + 30 * 60000);
+  const cam  = activeCamera();
   const fromStr = from.toISOString().slice(0,16);
   const toStr   = to.toISOString().slice(0,16);
 
@@ -752,39 +821,6 @@ async function searchHistoricalImages() {
     }
   } catch (e) {
     console.warn("searchHistoricalImages error:", e);
-  }
-}
-
-// ===== AAALAC Threshold =====
-function updateAAALAC(temp, rh) {
-  // Temperature: 18–26°C
-  const tVal = typeof temp.cur === "number" ? temp.cur : null;
-  const tPct = tVal !== null ? Math.min(100, Math.max(0, ((tVal - 18) / (26 - 18)) * 100)) : 0;
-  const tOk  = tVal !== null && tVal >= 18 && tVal <= 26;
-  const tEl  = document.getElementById("aaalac-temp-val");
-  const tBar = document.getElementById("aaalac-temp-bar");
-  const tBadge = document.getElementById("aaalac-temp-badge");
-  if (tEl) tEl.textContent = tVal !== null ? `${tVal.toFixed(1)} °C` : "--";
-  if (tBar) { tBar.style.width = `${tPct}%`; tBar.style.background = tOk ? "#35d071" : "#ff5353"; }
-  if (tBadge) {
-    tBadge.textContent = tOk ? "✓ IN RANGE" : "✗ OUT";
-    tBadge.style.background = tOk ? "#0c3524" : "#401617";
-    tBadge.style.color = tOk ? "#35d071" : "#ff5353";
-  }
-
-  // Humidity: 30–70%
-  const rhVal = typeof rh.cur === "number" ? rh.cur : null;
-  const rhPct = rhVal !== null ? Math.min(100, Math.max(0, ((rhVal - 30) / (70 - 30)) * 100)) : 0;
-  const rhOk  = rhVal !== null && rhVal >= 30 && rhVal <= 70;
-  const rhEl  = document.getElementById("aaalac-rh-val");
-  const rhBar = document.getElementById("aaalac-rh-bar");
-  const rhBadge = document.getElementById("aaalac-rh-badge");
-  if (rhEl) rhEl.textContent = rhVal !== null ? `${rhVal.toFixed(0)} %` : "--";
-  if (rhBar) { rhBar.style.width = `${rhPct}%`; rhBar.style.background = rhOk ? "#35d071" : "#ff5353"; }
-  if (rhBadge) {
-    rhBadge.textContent = rhOk ? "✓ IN RANGE" : "✗ OUT";
-    rhBadge.style.background = rhOk ? "#0c3524" : "#401617";
-    rhBadge.style.color = rhOk ? "#35d071" : "#ff5353";
   }
 }
 
@@ -945,11 +981,22 @@ installToolbars();
 bindEvents();
 initReports();
 loadMasterLog().then(refresh);
-// Load overlay with retry — wait 2s for page to fully load first
+
+// Extra safety net: once EVERYTHING (images, fonts, CDN scripts) has finished
+// loading, force every chart to re-measure its container. This clears the
+// same "chart rendered before layout settled" glitch that can otherwise only
+// be fixed by the user manually scrolling the page.
+window.addEventListener("load", () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      Object.values(STATE.charts).forEach(c => c.resize());
+    });
+  });
+});
+
 setTimeout(() => {
   updateOverlay();
-  // retry after 5s in case first load failed
   setTimeout(updateOverlay, 5000);
 }, 2000);
 setInterval(refresh, 60000);
-setInterval(updateOverlay, 120000); // refresh overlay every 2 min
+setInterval(updateOverlay, 120000);
