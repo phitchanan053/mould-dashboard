@@ -836,6 +836,11 @@ installToolbars();
 bindEvents();
 initReports();
 loadMasterLog().then(refresh);
-updateOverlay();
+// Load overlay with retry — wait 2s for page to fully load first
+setTimeout(() => {
+  updateOverlay();
+  // retry after 5s in case first load failed
+  setTimeout(updateOverlay, 5000);
+}, 2000);
 setInterval(refresh, 60000);
 setInterval(updateOverlay, 120000); // refresh overlay every 2 min
