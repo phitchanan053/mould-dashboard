@@ -77,11 +77,11 @@
       <span style="color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📊 Evaluation Window</span>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <label style="color:var(--muted);font-size:12px">Start</label>
-        <input type="datetime-local" id="evalStart"
-          style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px">
+        <input type="text" id="evalStart" placeholder="DD/MM/YYYY HH:MM"
+          style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;width:150px">
         <label style="color:var(--muted);font-size:12px">End</label>
-        <input type="datetime-local" id="evalEnd"
-          style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px">
+        <input type="text" id="evalEnd" placeholder="DD/MM/YYYY HH:MM"
+          style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;width:150px">
         <button onclick="applyEvalWindow()"
           style="background:#1f55b5;color:white;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer">Apply</button>
         <button onclick="clearEvalWindow()"
