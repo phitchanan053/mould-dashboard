@@ -164,6 +164,7 @@ function makeChart(id, label, rows, key, color) {
       interaction: { mode: "nearest", intersect: false },
       plugins: {
         legend: { display: false },
+        evalWindow: { start: EVAL.start, end: EVAL.end },
         tooltip: {
           callbacks: {
             title(items) {
@@ -292,7 +293,79 @@ function updateInsight(rh, temp, co2) {
   setText("insightText", `For ${room} (${zone}), ${rhNote}. The current temperature is ${fmt(temp.cur)}°C and CO₂ concentration is ${fmt(co2.cur, 0)} ppm. White light and UV fluorescence images provide visual evidence for the selected monitoring area. These sensor trends and inspection images will support later field validation of the WUFI FinMould model.`);
 }
 
-// ===== Data Quality =====
+// ===== Evaluation Window =====
+const EVAL = { start: null, end: null };
+
+function applyEvalWindow() {
+  const s = document.getElementById("evalStart").value;
+  const e = document.getElementById("evalEnd").value;
+  if (!s) { alert("Please set a Start date"); return; }
+  EVAL.start = new Date(s);
+  EVAL.end   = e ? new Date(e) : new Date();
+
+  const info = document.getElementById("evalWindowInfo");
+  if (info) info.textContent = `Window: ${EVAL.start.toLocaleDateString("en-GB")} → ${EVAL.end.toLocaleDateString("en-GB")}`;
+
+  // Redraw all charts with window lines
+  Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
+  updateOverlay();
+}
+
+function clearEvalWindow() {
+  EVAL.start = null;
+  EVAL.end   = null;
+  document.getElementById("evalStart").value = "";
+  document.getElementById("evalEnd").value   = "";
+  const info = document.getElementById("evalWindowInfo");
+  if (info) info.textContent = "";
+  Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
+}
+
+function drawEvalLines(chart) {
+  if (!chart) return;
+  // Remove old eval plugins
+  chart.options.plugins.evalWindow = { start: EVAL.start, end: EVAL.end };
+  chart.update("none");
+}
+
+// Plugin to draw evaluation window lines on all charts
+const evalWindowPlugin = {
+  id: "evalWindow",
+  afterDraw(chart) {
+    const { start, end } = chart.options.plugins.evalWindow || {};
+    if (!start && !end) return;
+    const { ctx, scales: { x, y } } = chart;
+    if (!x || !y) return;
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2;
+
+    if (start) {
+      const px = x.getPixelForValue(start);
+      if (px >= x.left && px <= x.right) {
+        ctx.strokeStyle = "#35d071";
+        ctx.beginPath(); ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom); ctx.stroke();
+        ctx.fillStyle = "#35d071";
+        ctx.font = "10px Inter,sans-serif";
+        ctx.fillText("▶ Start", px + 4, y.top + 14);
+      }
+    }
+    if (end) {
+      const px = x.getPixelForValue(end);
+      if (px >= x.left && px <= x.right) {
+        ctx.strokeStyle = "#ff5353";
+        ctx.beginPath(); ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom); ctx.stroke();
+        ctx.fillStyle = "#ff5353";
+        ctx.font = "10px Inter,sans-serif";
+        ctx.fillText("End ◀", px - 44, y.top + 14);
+      }
+    }
+    ctx.restore();
+  }
+};
+
+// Register plugin globally
+Chart.register(evalWindowPlugin);
 const SENSOR_INTERVAL_MIN = 10;   // expected interval in minutes
 const ALERT_THRESHOLD_MIN = 30;   // alert if no data for this long
 
