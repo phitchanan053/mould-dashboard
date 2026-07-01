@@ -508,7 +508,19 @@ async function fetchSensorRows(sensorName) {
   }
 }
 
+let overlayLoading = false;
+
 async function updateOverlay() {
+  if (overlayLoading) return; // prevent concurrent calls
+  overlayLoading = true;
+  try {
+    await _updateOverlay();
+  } finally {
+    overlayLoading = false;
+  }
+}
+
+async function _updateOverlay() {
   const room = STATE.room;
   const cleanSensor = `${room}_C_A_IAQ`;
   const riskSensor  = `${room}_R_A_IAQ`;
