@@ -304,7 +304,10 @@ function applyEvalWindow() {
   EVAL.end   = e ? new Date(e) : new Date();
 
   const info = document.getElementById("evalWindowInfo");
-  if (info) info.textContent = `Window: ${EVAL.start.toLocaleDateString("en-GB")} → ${EVAL.end.toLocaleDateString("en-GB")}`;
+  if (info) {
+    const fmt = d => `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(-2)}`;
+    info.textContent = `Window: ${fmt(EVAL.start)} → ${fmt(EVAL.end)}`;
+  }
 
   // Redraw all charts with window lines
   Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
