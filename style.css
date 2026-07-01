@@ -25,7 +25,7 @@ body{
 .brand{display:flex;gap:12px;align-items:center;margin-bottom:28px}
 .brand-mark{width:46px;height:46px;border:1px solid var(--line);border-radius:12px;display:grid;place-items:center;color:var(--green);font-weight:800}
 .brand span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase}
-.nav{display:grid;gap:4px;margin-bottom:12px}
+.nav{display:grid;gap:4px;margin-bottom:0}
 .nav button{border:0;background:transparent;color:var(--text);padding:9px 12px;border-radius:9px;text-align:left;font-size:14px;cursor:pointer}
 .nav button.active{background:linear-gradient(90deg,#1f55b5,#183b76)}
 .nav button:nth-child(n+6){display:none}
@@ -50,7 +50,7 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
 .chula-logo{width:140px}
 .ntust-logo{width:62px}
 .logo-divider{width:1px;height:48px;background:#334155}
-.sidebar-header{display:flex;flex-direction:column;align-items:center;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid #2b3b52}
+.sidebar-header{display:flex;flex-direction:column;align-items:center;padding-bottom:4px;margin-bottom:6px}
 .project-name{text-align:center}
 .project-name h2{margin:0;font-size:14px;font-weight:700;letter-spacing:2px;color:#fff}
 .project-name p{margin-top:2px;color:#94a3b8;font-size:11px;letter-spacing:1px}
