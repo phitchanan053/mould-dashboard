@@ -582,17 +582,30 @@ function toggleOverlaySensor(key) {
   }
   chart.update();
 }
-async function fetchSensorRows(sensorName) {
+async function fetchSensorRows(sensorName, attempt = 1) {
   try {
     const res = await fetch(`${API}/iaq/raw?iaq=${sensorName}&size=2000`);
     const text = await res.text();
     const rows = parseNDJSON(text);
+
+    // If we got nothing back, it's more likely a transient network/API
+    // hiccup than a sensor that truly has zero data. Retry once before
+    // giving up, so a single slow response doesn't make the line vanish.
+    if (!rows.length && attempt < 3) {
+      await new Promise(r => setTimeout(r, 800 * attempt));
+      return fetchSensorRows(sensorName, attempt + 1);
+    }
+
     return rows.sort((a, b) => {
       const da = toDate(a), db = toDate(b);
       return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
     });
   } catch (e) {
-    console.warn("fetchSensorRows error:", sensorName, e);
+    console.warn("fetchSensorRows error:", sensorName, e, `(attempt ${attempt})`);
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, 800 * attempt));
+      return fetchSensorRows(sensorName, attempt + 1);
+    }
     return [];
   }
 }
@@ -623,6 +636,21 @@ async function _updateOverlay() {
     fetchSensorRows(cleanSensor),
     fetchSensorRows(riskSensor)
   ]);
+
+  // If a sensor still has no data after the built-in retries, say so
+  // visibly instead of silently drawing an empty line.
+  if (legendClean) {
+    legendClean.textContent = cleanRows.length
+      ? `${cleanSensor} — Clean Above Ceiling`
+      : `${cleanSensor} — ⚠️ no data received`;
+    legendClean.style.color = cleanRows.length ? "" : "#ffb84d";
+  }
+  if (legendRisk) {
+    legendRisk.textContent = riskRows.length
+      ? `${riskSensor} — Risk Above Ceiling`
+      : `${riskSensor} — ⚠️ no data received`;
+    legendRisk.style.color = riskRows.length ? "" : "#ffb84d";
+  }
 
   const canvas = document.getElementById("overlayChart");
   if (!canvas) return;
