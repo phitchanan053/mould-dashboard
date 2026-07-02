@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Indoor Environmental Quality Monitoring Dashboard</title>
-  <!-- CDN scripts: NO defer — must load in order before app.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
@@ -178,6 +177,18 @@
             <h3 style="white-space:nowrap">Inspection Images</h3>
             <small style="text-align:right;line-height:1.4">White light and UV<br>fluorescence camera evidence</small>
           </div>
+
+          <!-- Historical Timeline Search -->
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+            <span style="color:var(--muted);font-size:11px;white-space:nowrap">🕐 Historical:</span>
+            <input type="datetime-local" id="imgSearchTime" lang="en"
+              style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:11px;color-scheme:dark;flex:1">
+            <button onclick="searchHistoricalImages()"
+              style="background:#1f55b5;color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;white-space:nowrap">Search</button>
+            <button onclick="loadLatestImages()"
+              style="background:#122137;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;white-space:nowrap">Latest</button>
+          </div>
+
           <div class="image-grid two-images" id="inspectionImages"></div>
         </div>
 
