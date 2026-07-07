@@ -498,6 +498,7 @@ function bindEvents() {
     STATE.room = e.target.value;
     updateReportSensorList();
     updateOverlay();
+    updateBaselineOverlay();
     refresh();
   });
 
@@ -728,6 +729,151 @@ async function _updateOverlay() {
           label: `${riskSensor}`,
           data: riskPts,
           hidden: !OVERLAY_STATE.risk,
+          borderColor: "#ff5353", backgroundColor: "#ff535322",
+          borderWidth: 2, pointRadius: 0, tension: 0.25, fill: false
+        }
+      ]
+    },
+    options: {
+      parsing: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "nearest", intersect: false },
+      plugins: {
+        legend: { display: false },
+        zoom: {
+          pan: { enabled: true, mode: "x" },
+          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" }
+        }
+      },
+      scales: {
+        x: {
+          type: "time", min: xMin, max: xMax,
+          time: { displayFormats: { hour: "HH:mm, MMM d", day: "MMM d" }, tooltipFormat: "MMM d, yyyy HH:mm" },
+          title: { display: true, text: "Timeline", color: "#d7e8ff" },
+          ticks: { source: "auto", color: "#d7e8ff", maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+          grid: { color: "rgba(255,255,255,.10)" }
+        },
+        y: {
+          title: { display: true, text: "%", color: "#d7e8ff" },
+          ticks: { color: "#d7e8ff" },
+          grid: { color: "rgba(255,255,255,.10)" }
+        }
+      }
+    }
+  });
+}
+
+let baselineOverlayLoading = false;
+
+async function updateBaselineOverlay() {
+  if (baselineOverlayLoading) return;
+  baselineOverlayLoading = true;
+  try {
+    await _updateBaselineOverlay();
+  } finally {
+    baselineOverlayLoading = false;
+  }
+}
+
+async function _updateBaselineOverlay() {
+  const room = STATE.room;
+  const baselineSensor = `${room}_ROOM_IAQ`;
+  const riskSensor = `${room}_R_A_IAQ`;
+
+  const legendBaseline = document.getElementById("legendBaseline");
+  const legendRisk = document.getElementById("legendBaselineRisk");
+  if (legendBaseline) legendBaseline.textContent = `${baselineSensor} — Room Level`;
+  if (legendRisk) legendRisk.textContent = `${riskSensor} — Risk Above Ceiling`;
+
+  const [baseRows, riskRows] = await Promise.all([
+    fetchSensorRows(baselineSensor),
+    fetchSensorRows(riskSensor)
+  ]);
+
+  if (legendBaseline) {
+    legendBaseline.textContent = baseRows.length
+      ? `${baselineSensor} — Room Level`
+      : `${baselineSensor} — ⚠️ no data received`;
+    legendBaseline.style.color = baseRows.length ? "" : "#ffb84d";
+  }
+  if (legendRisk) {
+    legendRisk.textContent = riskRows.length
+      ? `${riskSensor} — Risk Above Ceiling`
+      : `${riskSensor} — ⚠️ no data received`;
+    legendRisk.style.color = riskRows.length ? "" : "#ffb84d";
+  }
+
+  const canvas = document.getElementById("baselineOverlayChart");
+  if (!canvas) return;
+  if (STATE.charts["baselineOverlayChart"]) STATE.charts["baselineOverlayChart"].destroy();
+
+  const basePts = chartPoints(baseRows, "humidity");
+  const riskPts = chartPoints(riskRows, "humidity");
+
+  const baseCur = baseRows.length ? num(baseRows.at(-1).humidity) : null;
+  const riskCur = riskRows.length ? num(riskRows.at(-1).humidity) : null;
+  const gap = (baseCur !== null && riskCur !== null) ? (riskCur - baseCur).toFixed(1) : "--";
+
+  let exceedHours = 0;
+  for (let i = 1; i < riskRows.length; i++) {
+    const rh = num(riskRows[i].humidity);
+    if (rh !== null && rh > 70) {
+      const t1 = toDate(riskRows[i - 1]);
+      const t2 = toDate(riskRows[i]);
+      if (t1 && t2) exceedHours += (t2 - t1) / 3600000;
+    }
+  }
+  const exceedEl = document.getElementById("baselineExceed");
+  if (exceedEl) {
+    exceedEl.textContent = riskRows.length ? `${exceedHours.toFixed(1)} hrs` : "--";
+    exceedEl.style.color = exceedHours > 24 ? "#ff5353" : exceedHours > 6 ? "#ffb84d" : "#35d071";
+  }
+
+  setText("baselineRh", baseCur !== null ? `${baseCur.toFixed(0)} %` : "--");
+  setText("baselineRiskRh", riskCur !== null ? `${riskCur.toFixed(0)} %` : "--");
+  const gapEl = document.getElementById("baselineGap");
+  if (gapEl) {
+    gapEl.textContent = gap !== "--" ? `${Number(gap) > 0 ? "+" : ""}${gap} %` : "--";
+    gapEl.style.color = Number(gap) > 0 ? "#ff5353" : Number(gap) < 0 ? "#35d071" : "#d7e8ff";
+  }
+
+  const allTimes = [...basePts, ...riskPts].map(p => p.x.getTime());
+  const xMin = allTimes.length ? new Date(Math.min(...allTimes)) : undefined;
+  const xMax = allTimes.length ? new Date(Math.max(...allTimes)) : undefined;
+
+  const aaalacBandPlugin = {
+    id: "aaalacBand",
+    afterDraw(chart) {
+      const { ctx, scales: { x, y } } = chart;
+      const yTop = y.getPixelForValue(70);
+      const yBottom = y.getPixelForValue(30);
+      ctx.save();
+      ctx.strokeStyle = "#ffb84d";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(x.left, yTop); ctx.lineTo(x.right, yTop); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x.left, yBottom); ctx.lineTo(x.right, yBottom); ctx.stroke();
+      ctx.fillStyle = "#ffb84d";
+      ctx.font = "11px Inter,sans-serif";
+      ctx.fillText("RH 70%", x.right - 60, yTop - 5);
+      ctx.fillText("RH 30%", x.right - 60, yBottom + 14);
+      ctx.restore();
+    }
+  };
+
+  STATE.charts["baselineOverlayChart"] = new Chart(canvas, {
+    type: "line",
+    plugins: [aaalacBandPlugin],
+    data: {
+      datasets: [
+        {
+          label: `${baselineSensor}`,
+          data: basePts,
+          borderColor: "#35d071", backgroundColor: "#35d07122",
+          borderWidth: 2, pointRadius: 0, tension: 0.25, fill: false
+        },
+        {
+          label: `${riskSensor}`,
+          data: riskPts,
           borderColor: "#ff5353", backgroundColor: "#ff535322",
           borderWidth: 2, pointRadius: 0, tension: 0.25, fill: false
         }
@@ -996,7 +1142,12 @@ window.addEventListener("load", () => {
 
 setTimeout(() => {
   updateOverlay();
-  setTimeout(updateOverlay, 5000);
+  updateBaselineOverlay();
+  setTimeout(() => {
+    updateOverlay();
+    updateBaselineOverlay();
+  }, 5000);
 }, 2000);
 setInterval(refresh, 60000);
 setInterval(updateOverlay, 120000);
+setInterval(updateBaselineOverlay, 120000);
