@@ -64,7 +64,7 @@ function setText(id, value) {
 async function fetchIAQ() {
   const sensor = activeSensor();
   try {
-    const res = await fetch(`${API}/iaq/raw?iaq=${sensor}&size=2000`);
+    const res = await fetch(`${API}/iaq/raw?iaq=${sensor}&size=800`);
     const rows = parseNDJSON(await res.text());
     return rows.sort((a, b) => {
       const da = toDate(a), db = toDate(b);
@@ -497,8 +497,7 @@ function bindEvents() {
   document.getElementById("roomSelect").addEventListener("change", e => {
     STATE.room = e.target.value;
     updateReportSensorList();
-    updateOverlay();
-    updateBaselineOverlay();
+    Promise.all([updateOverlay(), updateBaselineOverlay()]);
     refresh();
   });
 
@@ -583,9 +582,24 @@ function toggleOverlaySensor(key) {
   }
   chart.update();
 }
+const SENSOR_CACHE = {};
+const SENSOR_CACHE_TTL_MS = 15000;
+const OVERLAY_RANGE_DAYS = 7;
+
+function overlayRangeParams() {
+  const to = new Date();
+  const from = new Date(to.getTime() - OVERLAY_RANGE_DAYS * 24 * 60 * 60 * 1000);
+  return { from: apiDate(from), to: apiDate(to) };
+}
+
 async function fetchSensorRows(sensorName, attempt = 1) {
+  const cached = SENSOR_CACHE[sensorName];
+  if (cached && (Date.now() - cached.ts) < SENSOR_CACHE_TTL_MS) {
+    return cached.rows;
+  }
   try {
-    const res = await fetch(`${API}/iaq/raw?iaq=${sensorName}&size=2000`);
+    const { from, to } = overlayRangeParams();
+    const res = await fetch(`${API}/iaq/range?iaq=${sensorName}&from=${from}&to=${to}`);
     const text = await res.text();
     const rows = parseNDJSON(text);
 
@@ -597,10 +611,12 @@ async function fetchSensorRows(sensorName, attempt = 1) {
       return fetchSensorRows(sensorName, attempt + 1);
     }
 
-    return rows.sort((a, b) => {
+    const sorted = rows.sort((a, b) => {
       const da = toDate(a), db = toDate(b);
       return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
     });
+    SENSOR_CACHE[sensorName] = { rows: sorted, ts: Date.now() };
+    return sorted;
   } catch (e) {
     console.warn("fetchSensorRows error:", sensorName, e, `(attempt ${attempt})`);
     if (attempt < 3) {
@@ -1141,13 +1157,10 @@ window.addEventListener("load", () => {
 });
 
 setTimeout(() => {
-  updateOverlay();
-  updateBaselineOverlay();
+  Promise.all([updateOverlay(), updateBaselineOverlay()]);
   setTimeout(() => {
-    updateOverlay();
-    updateBaselineOverlay();
+    Promise.all([updateOverlay(), updateBaselineOverlay()]);
   }, 5000);
 }, 2000);
 setInterval(refresh, 60000);
-setInterval(updateOverlay, 120000);
-setInterval(updateBaselineOverlay, 120000);
+setInterval(() => Promise.all([updateOverlay(), updateBaselineOverlay()]), 120000);
