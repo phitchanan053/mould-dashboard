@@ -148,6 +148,33 @@
             <span>Risk >70% <b id="overlayExceed" style="color:#ff5353">-- hrs</b></span>
           </div>
         </div>
+        <!-- Baseline vs Risk (AAALAC compliance) Overlay -->
+<div class="chart-card" id="baselineOverlayCard">
+  <div class="card-head">
+    <div>
+      <h3>RH Comparison: Baseline vs Risk (Above Ceiling)</h3>
+      <div style="display:flex;gap:16px;margin-top:6px;align-items:center">
+        <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <span style="display:inline-block;width:18px;height:2px;background:#35d071;border-radius:2px"></span><span id="legendBaseline">Baseline — Room Level</span>
+        </span>
+        <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <span style="display:inline-block;width:18px;height:2px;background:#ff5353;border-radius:2px"></span><span id="legendBaselineRisk">Risk — Above Ceiling</span>
+        </span>
+        <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <span style="display:inline-block;width:18px;border-top:2px dashed #ffb84d"></span>AAALAC 30–70%
+        </span>
+      </div>
+    </div>
+    <div class="chart-tools" data-chart="baselineOverlayChart"></div>
+  </div>
+  <canvas id="baselineOverlayChart"></canvas>
+  <div class="stats">
+    <span>Baseline RH <b id="baselineRh">--</b></span>
+    <span>Risk RH <b id="baselineRiskRh">--</b></span>
+    <span>Δ Gap <b id="baselineGap">--</b></span>
+    <span>Risk >70% <b id="baselineExceed" style="color:#ff5353">-- hrs</b></span>
+  </div>
+</div>
       </section>
 
       <section class="evidence-column">
