@@ -63,17 +63,7 @@ function setText(id, value) {
 
 async function fetchIAQ() {
   const sensor = activeSensor();
-  try {
-    const res = await fetch(`${API}/iaq/raw?iaq=${sensor}&size=800`);
-    const rows = parseNDJSON(await res.text());
-    return rows.sort((a, b) => {
-      const da = toDate(a), db = toDate(b);
-      return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
-    });
-  } catch (e) {
-    console.warn("fetchIAQ error:", e);
-    return [];
-  }
+  return fetchSensorRows(sensor);
 }
 
 async function fetchImages() {
@@ -585,6 +575,7 @@ function toggleOverlaySensor(key) {
 const SENSOR_CACHE = {};
 const SENSOR_CACHE_TTL_MS = 15000;
 const OVERLAY_RANGE_DAYS = 7;
+const SENSOR_INFLIGHT = {};
 
 function overlayRangeParams() {
   const to = new Date();
@@ -597,6 +588,24 @@ async function fetchSensorRows(sensorName, attempt = 1) {
   if (cached && (Date.now() - cached.ts) < SENSOR_CACHE_TTL_MS) {
     return cached.rows;
   }
+  // If a request for this exact sensor is already in flight (e.g. refresh()
+  // and updateOverlay() both asking for the same sensor at the same time
+  // during a room switch), reuse that single pending request instead of
+  // firing a second, redundant network call.
+  if (attempt === 1 && SENSOR_INFLIGHT[sensorName]) {
+    return SENSOR_INFLIGHT[sensorName];
+  }
+
+  const promise = _fetchSensorRowsNetwork(sensorName, attempt);
+  if (attempt === 1) SENSOR_INFLIGHT[sensorName] = promise;
+  try {
+    return await promise;
+  } finally {
+    if (attempt === 1) delete SENSOR_INFLIGHT[sensorName];
+  }
+}
+
+async function _fetchSensorRowsNetwork(sensorName, attempt) {
   try {
     const { from, to } = overlayRangeParams();
     const res = await fetch(`${API}/iaq/range?iaq=${sensorName}&from=${from}&to=${to}`);
@@ -608,7 +617,7 @@ async function fetchSensorRows(sensorName, attempt = 1) {
     // giving up, so a single slow response doesn't make the line vanish.
     if (!rows.length && attempt < 3) {
       await new Promise(r => setTimeout(r, 800 * attempt));
-      return fetchSensorRows(sensorName, attempt + 1);
+      return _fetchSensorRowsNetwork(sensorName, attempt + 1);
     }
 
     const sorted = rows.sort((a, b) => {
@@ -621,7 +630,7 @@ async function fetchSensorRows(sensorName, attempt = 1) {
     console.warn("fetchSensorRows error:", sensorName, e, `(attempt ${attempt})`);
     if (attempt < 3) {
       await new Promise(r => setTimeout(r, 800 * attempt));
-      return fetchSensorRows(sensorName, attempt + 1);
+      return _fetchSensorRowsNetwork(sensorName, attempt + 1);
     }
     return [];
   }
