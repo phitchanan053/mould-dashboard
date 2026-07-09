@@ -43,7 +43,12 @@ function toDate(row) {
 }
 
 function apiDate(date) {
-  return date.toISOString().slice(0, 16);
+  // IMPORTANT: use LOCAL time (Bangkok, UTC+7), not toISOString() which is
+  // UTC. Sensor timestamps from the API are in local time, so converting to
+  // UTC here shifts the requested window 7 hours into the past and makes
+  // the dashboard think data has stopped arriving when it hasn't.
+  const pad = n => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function num(value) {
@@ -976,8 +981,8 @@ async function searchHistoricalImages() {
   const from = new Date(searchTime.getTime() - 30 * 60000);
   const to   = new Date(searchTime.getTime() + 30 * 60000);
   const cam  = activeCamera();
-  const fromStr = from.toISOString().slice(0,16);
-  const toStr   = to.toISOString().slice(0,16);
+  const fromStr = apiDate(from);
+  const toStr   = apiDate(to);
 
   try {
     const res = await fetch(`${API}/images/range?camera=${cam}&from=${fromStr}&to=${toStr}`);
