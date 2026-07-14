@@ -220,3 +220,27 @@ select{width:100%;background:#0b1522;color:var(--text);border:1px solid var(--li
   .research-insight{grid-template-columns:1fr}
   .main{padding:14px}
 }
+
+/* Add this block to style.css — styles for the new 24h / 7-day / Eval Window
+   averaging toggle buttons on the RH comparison charts. */
+
+.avg-btn {
+  background: #122137;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.avg-btn.active {
+  background: #1f55b5;
+  color: white;
+  border-color: #1f55b5;
+}
+
+.avg-btn:hover:not(.active) {
+  border-color: #1f55b5;
+  color: #d7e8ff;
+}
