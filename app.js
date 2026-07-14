@@ -69,6 +69,32 @@ function setText(id, value) {
 const EVAL_RANGE_CACHE = {};
 const EVAL_RANGE_CACHE_TTL_MS = 15000;
 
+async function fetchEvalRows(sensorName) {
+  if (!EVAL.start) return [];
+  const from = apiDate(EVAL.start);
+  const to = apiDate(EVAL.end || new Date());
+  const cacheKey = `${sensorName}|${from}|${to}`;
+
+  const cached = EVAL_RANGE_CACHE[cacheKey];
+  if (cached && (Date.now() - cached.ts) < EVAL_RANGE_CACHE_TTL_MS) {
+    return cached.rows;
+  }
+
+  try {
+    const res = await fetch(`${API}/iaq/range?iaq=${sensorName}&from=${from}&to=${to}`);
+    const rows = parseNDJSON(await res.text());
+    const sorted = rows.sort((a, b) => {
+      const da = toDate(a), db = toDate(b);
+      return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+    });
+    EVAL_RANGE_CACHE[cacheKey] = { rows: sorted, ts: Date.now() };
+    return sorted;
+  } catch (e) {
+    console.warn("fetchEvalRows error:", sensorName, e);
+    return [];
+  }
+}
+
 async function fetchIAQ() {
   const sensor = activeSensor();
   if (EVAL.start) {
@@ -76,35 +102,12 @@ async function fetchIAQ() {
     // range, so the Temperature/RH/CO2 trend charts actually zoom to the
     // period the user set (e.g. to match a specific field inspection round),
     // rather than always showing the last 7 days regardless of the window.
-    const from = apiDate(EVAL.start);
-    const to = apiDate(EVAL.end || new Date());
-    const cacheKey = `${sensor}|${from}|${to}`;
-
-    const cached = EVAL_RANGE_CACHE[cacheKey];
-    if (cached && (Date.now() - cached.ts) < EVAL_RANGE_CACHE_TTL_MS) {
-      return cached.rows;
-    }
-
-    try {
-      const res = await fetch(`${API}/iaq/range?iaq=${sensor}&from=${from}&to=${to}`);
-      const rows = parseNDJSON(await res.text());
-      const sorted = rows.sort((a, b) => {
-        const da = toDate(a), db = toDate(b);
-        return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
-      });
-
-      // If the window genuinely returns nothing (e.g. it starts before the
-      // sensor was installed, or overlaps a known bad data period), fall
-      // back to the default rolling range instead of silently showing an
-      // empty chart.
-      if (!sorted.length) return fetchSensorRows(sensor);
-
-      EVAL_RANGE_CACHE[cacheKey] = { rows: sorted, ts: Date.now() };
-      return sorted;
-    } catch (e) {
-      console.warn("fetchIAQ eval window error:", e);
-      return fetchSensorRows(sensor); // fallback to default rolling range
-    }
+    const rows = await fetchEvalRows(sensor);
+    // If the window genuinely returns nothing (e.g. it starts before the
+    // sensor was installed, or overlaps a known bad data period), fall
+    // back to the default rolling range instead of silently showing an
+    // empty chart.
+    return rows.length ? rows : fetchSensorRows(sensor);
   }
   return fetchSensorRows(sensor);
 }
@@ -800,8 +803,22 @@ async function _updateOverlay() {
   const riskPts  = chartPoints(riskRows,  "humidity");
 
   const windowKey = AVG_WINDOW_STATE.overlayChart;
-  const cleanCur = avgHumidityInWindow(cleanRows, windowKey);
-  const riskCur  = avgHumidityInWindow(riskRows,  windowKey);
+  let cleanCur, riskCur;
+  if (windowKey === "eval") {
+    // The plotted lines still use the fixed rolling 7-day fetch (cleanRows/
+    // riskRows), but that range won't include an Eval Window set further in
+    // the past — so fetch the Eval Window's own data specifically for the
+    // KPI averages instead of silently finding nothing.
+    const [cleanEvalRows, riskEvalRows] = await Promise.all([
+      fetchEvalRows(cleanSensor),
+      fetchEvalRows(riskSensor)
+    ]);
+    cleanCur = avgHumidityInWindow(cleanEvalRows, "eval");
+    riskCur  = avgHumidityInWindow(riskEvalRows,  "eval");
+  } else {
+    cleanCur = avgHumidityInWindow(cleanRows, windowKey);
+    riskCur  = avgHumidityInWindow(riskRows,  windowKey);
+  }
   const gap = (cleanCur !== null && riskCur !== null) ? (riskCur - cleanCur).toFixed(1) : "--";
 
   let exceedHours = 0;
@@ -950,8 +967,21 @@ async function _updateBaselineOverlay() {
   const riskPts = chartPoints(riskRows, "humidity");
 
   const windowKey = AVG_WINDOW_STATE.baselineOverlayChart;
-  const baseCur = avgHumidityInWindow(baseRows, windowKey);
-  const riskCur = avgHumidityInWindow(riskRows, windowKey);
+  let baseCur, riskCur;
+  if (windowKey === "eval") {
+    // Same reasoning as the Clean vs Risk overlay above: fetch the Eval
+    // Window's own data for the averages, since the fixed rolling 7-day
+    // fetch (baseRows/riskRows) won't cover an older Eval Window.
+    const [baseEvalRows, riskEvalRows] = await Promise.all([
+      fetchEvalRows(baselineSensor),
+      fetchEvalRows(riskSensor)
+    ]);
+    baseCur = avgHumidityInWindow(baseEvalRows, "eval");
+    riskCur = avgHumidityInWindow(riskEvalRows, "eval");
+  } else {
+    baseCur = avgHumidityInWindow(baseRows, windowKey);
+    riskCur = avgHumidityInWindow(riskRows, windowKey);
+  }
   const gap = (baseCur !== null && riskCur !== null) ? (riskCur - baseCur).toFixed(1) : "--";
 
   let exceedHours = 0;
