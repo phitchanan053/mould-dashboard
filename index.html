@@ -140,6 +140,11 @@
             </div>
             <div class="chart-tools" data-chart="overlayChart"></div>
           </div>
+          <div class="avg-toggle" data-target="overlayChart" style="display:flex;gap:6px;margin:8px 0">
+            <button class="avg-btn active" data-window="24h">24h</button>
+            <button class="avg-btn" data-window="7d">7 days</button>
+            <button class="avg-btn" data-window="eval">Eval Window</button>
+          </div>
           <canvas id="overlayChart"></canvas>
           <div class="stats">
             <span>Clean RH <b id="overlayCleanRh">--</b></span>
@@ -166,6 +171,11 @@
       </div>
     </div>
     <div class="chart-tools" data-chart="baselineOverlayChart"></div>
+  </div>
+  <div class="avg-toggle" data-target="baselineOverlayChart" style="display:flex;gap:6px;margin:8px 0">
+    <button class="avg-btn active" data-window="24h">24h</button>
+    <button class="avg-btn" data-window="7d">7 days</button>
+    <button class="avg-btn" data-window="eval">Eval Window</button>
   </div>
   <canvas id="baselineOverlayChart"></canvas>
   <div class="stats">
