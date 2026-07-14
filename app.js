@@ -68,6 +68,25 @@ function setText(id, value) {
 
 async function fetchIAQ() {
   const sensor = activeSensor();
+  if (EVAL.start) {
+    // Use the evaluation window range instead of the default rolling 7-day
+    // range, so the Temperature/RH/CO2 trend charts actually zoom to the
+    // period the user set (e.g. to match a specific field inspection round),
+    // rather than always showing the last 7 days regardless of the window.
+    const from = apiDate(EVAL.start);
+    const to = apiDate(EVAL.end || new Date());
+    try {
+      const res = await fetch(`${API}/iaq/range?iaq=${sensor}&from=${from}&to=${to}`);
+      const rows = parseNDJSON(await res.text());
+      return rows.sort((a, b) => {
+        const da = toDate(a), db = toDate(b);
+        return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+      });
+    } catch (e) {
+      console.warn("fetchIAQ eval window error:", e);
+      return fetchSensorRows(sensor); // fallback to default rolling range
+    }
+  }
   return fetchSensorRows(sensor);
 }
 
@@ -300,6 +319,7 @@ function applyEvalWindow() {
   }
 
   Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
+  refresh();          // reload Temp/RH/CO2 charts using the eval window range
   updateOverlay();
 
   // If either overlay chart is currently set to use the Eval Window for its
@@ -316,6 +336,7 @@ function clearEvalWindow() {
   const info = document.getElementById("evalWindowInfo");
   if (info) info.textContent = "";
   Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
+  refresh();          // reload Temp/RH/CO2 charts back to the default 7-day range
 
   if (AVG_WINDOW_STATE.overlayChart === "eval") updateOverlay();
   if (AVG_WINDOW_STATE.baselineOverlayChart === "eval") updateBaselineOverlay();
