@@ -66,6 +66,9 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+const EVAL_RANGE_CACHE = {};
+const EVAL_RANGE_CACHE_TTL_MS = 15000;
+
 async function fetchIAQ() {
   const sensor = activeSensor();
   if (EVAL.start) {
@@ -75,13 +78,29 @@ async function fetchIAQ() {
     // rather than always showing the last 7 days regardless of the window.
     const from = apiDate(EVAL.start);
     const to = apiDate(EVAL.end || new Date());
+    const cacheKey = `${sensor}|${from}|${to}`;
+
+    const cached = EVAL_RANGE_CACHE[cacheKey];
+    if (cached && (Date.now() - cached.ts) < EVAL_RANGE_CACHE_TTL_MS) {
+      return cached.rows;
+    }
+
     try {
       const res = await fetch(`${API}/iaq/range?iaq=${sensor}&from=${from}&to=${to}`);
       const rows = parseNDJSON(await res.text());
-      return rows.sort((a, b) => {
+      const sorted = rows.sort((a, b) => {
         const da = toDate(a), db = toDate(b);
         return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
       });
+
+      // If the window genuinely returns nothing (e.g. it starts before the
+      // sensor was installed, or overlaps a known bad data period), fall
+      // back to the default rolling range instead of silently showing an
+      // empty chart.
+      if (!sorted.length) return fetchSensorRows(sensor);
+
+      EVAL_RANGE_CACHE[cacheKey] = { rows: sorted, ts: Date.now() };
+      return sorted;
     } catch (e) {
       console.warn("fetchIAQ eval window error:", e);
       return fetchSensorRows(sensor); // fallback to default rolling range
@@ -438,6 +457,10 @@ function updateDataQuality(rows) {
 
 async function refresh() {
   const rows = await fetchIAQ();
+  // The "is the sensor alive?" check must always reflect the sensor's real,
+  // most-recent activity — never the Eval Window's selected range — or
+  // picking an old window makes a perfectly live sensor look dead.
+  const liveRows = EVAL.start ? await fetchSensorRows(activeSensor()) : rows;
   const images = await fetchImages();
 
   const temp = metric(rows, "temperature");
@@ -459,7 +482,7 @@ async function refresh() {
   }
   setText("kpiCo2", `${fmt(co2.cur, 0)} ppm`);
   setText("kpiQuality", "");
-  updateDataQuality(rows);
+  updateDataQuality(liveRows);
   setText("kpiTempRange", `Min ${fmt(temp.min)} | Max ${fmt(temp.max)}`);
   setText("kpiRhRange", `Min ${fmt(rh.min)} | Max ${fmt(rh.max)}`);
   setText("kpiCo2Range", `Min ${fmt(co2.min, 0)} | Max ${fmt(co2.max, 0)}`);
