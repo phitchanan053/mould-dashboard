@@ -354,6 +354,26 @@
         <!-- Status -->
         <div id="rpt-status" style="display:none;padding:12px 16px;border-radius:8px;font-size:14px"></div>
 
+        <!-- Preview Table -->
+        <div id="rpt-preview-wrap" style="display:none">
+          <div style="overflow-x:auto;border:1px solid var(--line);border-radius:8px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead id="rpt-preview-head" style="background:#0b1522;color:var(--muted);text-align:left"></thead>
+              <tbody id="rpt-preview-body"></tbody>
+            </table>
+          </div>
+          <small id="rpt-preview-note" style="display:block;color:var(--muted);margin-top:8px"></small>
+        </div>
+
+        <!-- Download (appears after a successful preview) -->
+        <div>
+          <button id="rpt-download-btn" onclick="downloadExtraction()" style="display:none;
+            align-items:center;gap:10px;background:#0c3524;color:#35d071;border:1px solid #1d5c3f;
+            border-radius:8px;padding:13px 22px;font-size:15px;cursor:pointer">
+            <span>⬇</span> <span id="rpt-download-label">Download</span>
+          </button>
+        </div>
+
       </div>
     </section>
 
