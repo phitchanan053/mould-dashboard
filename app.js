@@ -301,6 +301,11 @@ function applyEvalWindow() {
 
   Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
   updateOverlay();
+
+  // If either overlay chart is currently set to use the Eval Window for its
+  // averaging, refresh it too so the KPI numbers reflect the new window.
+  if (AVG_WINDOW_STATE.overlayChart === "eval") updateOverlay();
+  if (AVG_WINDOW_STATE.baselineOverlayChart === "eval") updateBaselineOverlay();
 }
 
 function clearEvalWindow() {
@@ -311,6 +316,9 @@ function clearEvalWindow() {
   const info = document.getElementById("evalWindowInfo");
   if (info) info.textContent = "";
   Object.keys(STATE.charts).forEach(id => drawEvalLines(STATE.charts[id]));
+
+  if (AVG_WINDOW_STATE.overlayChart === "eval") updateOverlay();
+  if (AVG_WINDOW_STATE.baselineOverlayChart === "eval") updateBaselineOverlay();
 }
 
 function drawEvalLines(chart) {
@@ -555,6 +563,28 @@ function bindEvents() {
       document.getElementById(button.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
+
+  // ===== Averaging Window toggle (24h / 7d / Evaluation Window) =====
+  // Shared between the "Clean vs Risk" overlay and the "Baseline vs Risk"
+  // overlay so both charts can independently choose how their KPI numbers
+  // (Clean/Baseline RH, Risk RH, Δ Gap) are averaged.
+  document.querySelectorAll(".avg-toggle").forEach(group => {
+    const target = group.dataset.target; // "overlayChart" or "baselineOverlayChart"
+    group.querySelectorAll(".avg-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        group.querySelectorAll(".avg-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        AVG_WINDOW_STATE[target] = btn.dataset.window;
+
+        if (btn.dataset.window === "eval" && !EVAL.start) {
+          alert("กรุณาตั้งค่า Evaluation Window ก่อน (ด้านบน) แล้วกด Apply");
+        }
+
+        if (target === "overlayChart") updateOverlay();
+        else updateBaselineOverlay();
+      });
+    });
+  });
 }
 
 // ===== Multi-sensor Overlay =====
@@ -641,6 +671,41 @@ async function _fetchSensorRowsNetwork(sensorName, attempt) {
   }
 }
 
+// ===== Averaging Window (24h / 7d / Evaluation Window) =====
+// Controls how the KPI numbers under each overlay chart (Clean/Baseline RH,
+// Risk RH, Δ Gap) are computed. Previously these used only the single most
+// recent data point (rows.at(-1)), which made the KPI numbers reflect just
+// "right now" instead of the trend shown across the whole chart.
+const AVG_WINDOW_STATE = { overlayChart: "24h", baselineOverlayChart: "24h" };
+
+function getAvgWindowRange(windowKey) {
+  const now = new Date();
+  if (windowKey === "24h") {
+    return { from: new Date(now - 24 * 60 * 60 * 1000), to: now };
+  }
+  if (windowKey === "7d") {
+    return { from: new Date(now - 7 * 24 * 60 * 60 * 1000), to: now };
+  }
+  if (windowKey === "eval") {
+    if (EVAL.start) return { from: EVAL.start, to: EVAL.end || now };
+    return null; // Eval Window selected but not yet set via Apply
+  }
+  return { from: new Date(now - 24 * 60 * 60 * 1000), to: now };
+}
+
+function avgHumidityInWindow(rows, windowKey) {
+  const range = getAvgWindowRange(windowKey);
+  if (!range) return null; // e.g. "eval" selected but EVAL.start not set
+  const vals = rows
+    .filter(r => {
+      const d = toDate(r);
+      return d && d.getTime() >= range.from.getTime() && d.getTime() <= range.to.getTime();
+    })
+    .map(r => num(r.humidity))
+    .filter(v => v !== null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
 let overlayLoading = false;
 
 async function updateOverlay() {
@@ -690,8 +755,9 @@ async function _updateOverlay() {
   const cleanPts = chartPoints(cleanRows, "humidity");
   const riskPts  = chartPoints(riskRows,  "humidity");
 
-  const cleanCur = cleanRows.length ? num(cleanRows.at(-1).humidity) : null;
-  const riskCur  = riskRows.length  ? num(riskRows.at(-1).humidity)  : null;
+  const windowKey = AVG_WINDOW_STATE.overlayChart;
+  const cleanCur = avgHumidityInWindow(cleanRows, windowKey);
+  const riskCur  = avgHumidityInWindow(riskRows,  windowKey);
   const gap = (cleanCur !== null && riskCur !== null) ? (riskCur - cleanCur).toFixed(1) : "--";
 
   let exceedHours = 0;
@@ -839,8 +905,9 @@ async function _updateBaselineOverlay() {
   const basePts = chartPoints(baseRows, "humidity");
   const riskPts = chartPoints(riskRows, "humidity");
 
-  const baseCur = baseRows.length ? num(baseRows.at(-1).humidity) : null;
-  const riskCur = riskRows.length ? num(riskRows.at(-1).humidity) : null;
+  const windowKey = AVG_WINDOW_STATE.baselineOverlayChart;
+  const baseCur = avgHumidityInWindow(baseRows, windowKey);
+  const riskCur = avgHumidityInWindow(riskRows, windowKey);
   const gap = (baseCur !== null && riskCur !== null) ? (riskCur - baseCur).toFixed(1) : "--";
 
   let exceedHours = 0;
