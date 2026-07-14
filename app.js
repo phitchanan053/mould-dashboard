@@ -1206,13 +1206,17 @@ function initReports() {
   updateReportSensorList();
   document.getElementById("rpt-endpoint").addEventListener("change", e => {
     const isImage = e.target.value === "images/raw";
+    const isRange = e.target.value === "iaq/range";
     document.getElementById("rpt-sensors-wrap").style.display = isImage ? "none" : "";
-    document.getElementById("rpt-size-wrap").style.display = isImage ? "none" : "";
+    document.getElementById("rpt-size-wrap").style.display = (isImage || isRange) ? "none" : "";
+    const rangeWrap = document.getElementById("rpt-range-wrap");
+    if (rangeWrap) rangeWrap.style.display = isRange ? "" : "none";
   });
 }
 
 async function runExtraction() {
   const endpoint = document.getElementById("rpt-endpoint").value;
+  const isRange = endpoint === "iaq/range";
   const size = document.getElementById("rpt-size").value || 500;
   const fmt = document.querySelector('input[name="rpt-fmt"]:checked').value;
   const btn = document.getElementById("rpt-btn");
@@ -1226,6 +1230,20 @@ async function runExtraction() {
     status.style.background = "#401617";
     status.textContent = "⚠️ Please select at least one sensor.";
     return;
+  }
+
+  let fromStr, toStr;
+  if (isRange) {
+    const fromVal = document.getElementById("rpt-from")?.value;
+    const toVal = document.getElementById("rpt-to")?.value;
+    if (!fromVal) {
+      status.style.display = "block";
+      status.style.background = "#401617";
+      status.textContent = "⚠️ Please set a From date for /iaq/range.";
+      return;
+    }
+    fromStr = apiDate(new Date(fromVal));
+    toStr = apiDate(toVal ? new Date(toVal) : new Date());
   }
 
   btn.disabled = true;
@@ -1243,7 +1261,10 @@ async function runExtraction() {
     } else {
       for (const sensor of sensors) {
         status.textContent = `Fetching ${sensor} ...`;
-        const res = await fetch(`${API}/${endpoint}?iaq=${sensor}&size=${size}`);
+        const url = isRange
+          ? `${API}/${endpoint}?iaq=${sensor}&from=${fromStr}&to=${toStr}`
+          : `${API}/${endpoint}?iaq=${sensor}&size=${size}`;
+        const res = await fetch(url);
         const rows = parseNDJSON(await res.text());
         allRows = allRows.concat(rows);
       }
