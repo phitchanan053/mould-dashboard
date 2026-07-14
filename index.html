@@ -295,7 +295,7 @@
           </select>
         </div>
 
-        <!-- Size -->
+        <!-- Size (for /iaq/raw) -->
         <div id="rpt-size-wrap">
           <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Maximum Payload Record Depth (size)</label>
           <div style="display:flex;gap:8px;align-items:center">
@@ -305,6 +305,18 @@
               style="background:#1a2d45;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:18px;cursor:pointer">−</button>
             <button onclick="document.getElementById('rpt-size').value=Math.min(9999,+document.getElementById('rpt-size').value+100)"
               style="background:#c0392b;color:white;border:none;border-radius:8px;padding:10px 16px;font-size:18px;cursor:pointer">+</button>
+          </div>
+        </div>
+
+        <!-- Date Range (for /iaq/range) -->
+        <div id="rpt-range-wrap" style="display:none">
+          <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Date Range (From / To)</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="datetime-local" id="rpt-from" lang="en"
+              style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;color-scheme:dark">
+            <span style="color:var(--muted)">→</span>
+            <input type="datetime-local" id="rpt-to" lang="en"
+              style="background:#0b1522;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;color-scheme:dark">
           </div>
         </div>
 
