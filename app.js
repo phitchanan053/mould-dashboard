@@ -1214,13 +1214,49 @@ function initReports() {
   });
 }
 
+// Holds the most recently fetched extraction result so the Download button
+// can build the file without re-fetching (and so the preview table and the
+// downloaded file always match exactly).
+let LAST_EXTRACTION = null;
+
+function renderExtractionPreview(rows) {
+  const wrap = document.getElementById("rpt-preview-wrap");
+  const head = document.getElementById("rpt-preview-head");
+  const body = document.getElementById("rpt-preview-body");
+  const note = document.getElementById("rpt-preview-note");
+  if (!wrap || !head || !body) return;
+
+  if (!rows.length) {
+    wrap.style.display = "none";
+    return;
+  }
+
+  const keys = Object.keys(rows[0]);
+  const previewRows = rows.slice(0, 15);
+
+  head.innerHTML = `<tr>${keys.map(k =>
+    `<th style="padding:8px 12px;border-bottom:1px solid var(--line)">${k}</th>`
+  ).join("")}</tr>`;
+
+  body.innerHTML = previewRows.map(r => `
+    <tr>${keys.map(k =>
+      `<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.06)">${r[k] ?? ""}</td>`
+    ).join("")}</tr>
+  `).join("");
+
+  if (note) {
+    note.textContent = `Showing ${previewRows.length} of ${rows.length} records. Download to get the full set.`;
+  }
+  wrap.style.display = "block";
+}
+
 async function runExtraction() {
   const endpoint = document.getElementById("rpt-endpoint").value;
   const isRange = endpoint === "iaq/range";
   const size = document.getElementById("rpt-size").value || 500;
-  const fmt = document.querySelector('input[name="rpt-fmt"]:checked').value;
   const btn = document.getElementById("rpt-btn");
   const status = document.getElementById("rpt-status");
+  const downloadBtn = document.getElementById("rpt-download-btn");
 
   const sensors = [...document.querySelectorAll("#rpt-sensor-list input:checked")]
     .map(cb => cb.value);
@@ -1251,6 +1287,8 @@ async function runExtraction() {
   status.style.display = "block";
   status.style.background = "#0d2b55";
   status.textContent = `Fetching ${endpoint} ...`;
+  if (downloadBtn) downloadBtn.style.display = "none";
+  document.getElementById("rpt-preview-wrap").style.display = "none";
 
   try {
     let allRows = [];
@@ -1277,41 +1315,57 @@ async function runExtraction() {
     if (!allRows.length) {
       status.style.background = "#401617";
       status.textContent = "⚠️ No data returned from API.";
+      LAST_EXTRACTION = null;
       return;
     }
 
-    let blob, filename;
-    const tag = `${endpoint.replace(/\//g,"_")}_${Date.now()}`;
-
-    if (fmt === "csv") {
-      const keys = Object.keys(allRows[0]);
-      const csv = [keys.join(","), ...allRows.map(r =>
-        keys.map(k => JSON.stringify(r[k] ?? "")).join(",")
-      )].join("\n");
-      blob = new Blob([csv], { type: "text/csv" });
-      filename = `export_${tag}.csv`;
-    } else {
-      blob = new Blob([allRows.map(r => JSON.stringify(r)).join("\n")],
-        { type: "application/x-ndjson" });
-      filename = `export_${tag}.ndjson`;
-    }
-
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    LAST_EXTRACTION = { rows: allRows, endpoint };
+    renderExtractionPreview(allRows);
 
     status.style.background = "#0c3524";
-    status.textContent = `✅ Downloaded ${allRows.length} records → ${filename}`;
+    status.textContent = `✅ Fetched ${allRows.length} records. Review the preview below, then download.`;
+
+    if (downloadBtn) {
+      downloadBtn.style.display = "flex";
+      document.getElementById("rpt-download-label").textContent =
+        `Download (${allRows.length} records)`;
+    }
 
   } catch (e) {
     status.style.background = "#401617";
     status.textContent = `❌ Error: ${e.message}`;
+    LAST_EXTRACTION = null;
   } finally {
     btn.disabled = false;
     btn.innerHTML = "<span>⚡</span> Initialize Extraction Execution Route";
   }
+}
+
+function downloadExtraction() {
+  if (!LAST_EXTRACTION || !LAST_EXTRACTION.rows.length) return;
+  const { rows, endpoint } = LAST_EXTRACTION;
+  const fmt = document.querySelector('input[name="rpt-fmt"]:checked').value;
+  const tag = `${endpoint.replace(/\//g, "_")}_${Date.now()}`;
+
+  let blob, filename;
+  if (fmt === "csv") {
+    const keys = Object.keys(rows[0]);
+    const csv = [keys.join(","), ...rows.map(r =>
+      keys.map(k => JSON.stringify(r[k] ?? "")).join(",")
+    )].join("\n");
+    blob = new Blob([csv], { type: "text/csv" });
+    filename = `export_${tag}.csv`;
+  } else {
+    blob = new Blob([rows.map(r => JSON.stringify(r)).join("\n")],
+      { type: "application/x-ndjson" });
+    filename = `export_${tag}.ndjson`;
+  }
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // script is at end of body — DOM is ready
